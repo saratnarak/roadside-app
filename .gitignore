@@ -1,0 +1,55 @@
+# Node
+node_modules/
+.npm/
+
+# Expo / React Native
+.expo/
+dist/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
+# iOS CocoaPods & Builds
+mobile/ios/Pods/
+mobile/ios/build/
+mobile/ios/DerivedData/
+mobile/ios/*.xcworkspace
+mobile/ios/*.xcodeproj/xcuserdata/
+mobile/ios/*.xcodeproj/project.xcworkspace/xcuserdata/
+*.ipa
+*.hmap
+*.xcuserstate
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+venv/
+env/
+.venv/
+
+# Environment files and credentials (NEVER COMMIT)
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# MacOS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+*.swp
