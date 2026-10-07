@@ -8,9 +8,29 @@ export async function requestForegroundLocationPermission(): Promise<Location.Pe
 }
 
 export async function getCurrentUserLocation(): Promise<Location.LocationObject> {
-  return Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
-  });
+  // 1. Try last known position first (instant response, prevents timeouts in simulator)
+  try {
+    const lastKnown = await Location.getLastKnownPositionAsync();
+    if (lastKnown) {
+      // Trigger background update if needed, but return quickly
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(() => {});
+      return lastKnown;
+    }
+  } catch (err) {
+    console.warn('Last known position not available:', err);
+  }
+
+  // 2. Fetch fresh position with Balanced accuracy
+  try {
+    return await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+  } catch (balancedErr) {
+    console.warn('Balanced accuracy failed, trying lowest accuracy:', balancedErr);
+    return await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Lowest,
+    });
+  }
 }
 
 export async function watchUserLocation(
@@ -18,7 +38,7 @@ export async function watchUserLocation(
 ): Promise<Location.LocationSubscription> {
   return Location.watchPositionAsync(
     {
-      accuracy: Location.Accuracy.High,
+      accuracy: Location.Accuracy.Balanced,
       timeInterval: 2000,
       distanceInterval: 5,
     },

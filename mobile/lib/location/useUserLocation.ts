@@ -24,14 +24,33 @@ export function useUserLocation() {
 
   const startWatching = async () => {
     stopWatching();
-    const subscription = await watchUserLocation((nextLocation) => {
-      setLocation(nextLocation);
-      setError(null);
-    });
-    subscriptionRef.current = subscription;
+    try {
+      const subscription = await watchUserLocation((nextLocation) => {
+        setLocation(nextLocation);
+        setError(null);
+      });
+      subscriptionRef.current = subscription;
+    } catch (watchErr) {
+      console.warn('Watch location error:', watchErr);
+    }
   };
 
-  const requestLocationAccess = async () => {
+  const refreshLocation = async (): Promise<Location.LocationObject | null> => {
+    setIsLoading(true);
+    try {
+      const current = await getCurrentUserLocation();
+      setLocation(current);
+      setError(null);
+      return current;
+    } catch (fetchError) {
+      console.warn('Failed to refresh location:', fetchError);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const requestLocationAccess = async (): Promise<Location.PermissionStatus> => {
     setError(null);
     setPermissionState('requesting');
     setIsLoading(true);
@@ -47,13 +66,15 @@ export function useUserLocation() {
       } else {
         setPermissionState('denied');
       }
+      return result;
     } catch (requestError) {
-      setPermissionState('granted');
+      setPermissionState('denied');
       setError(
         requestError instanceof Error
           ? requestError.message
           : 'Unable to determine your location.',
       );
+      return Location.PermissionStatus.DENIED;
     } finally {
       setIsLoading(false);
     }
@@ -98,7 +119,7 @@ export function useUserLocation() {
         }
       } catch (locationError) {
         if (!isCancelled) {
-          setPermissionState('granted');
+          setPermissionState('denied');
           setError(
             locationError instanceof Error
               ? locationError.message
@@ -125,6 +146,7 @@ export function useUserLocation() {
     location,
     error,
     isLoading,
+    refreshLocation,
     requestLocationAccess,
   };
 }

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   Linking,
@@ -44,18 +45,20 @@ function formatDistance(meters: number): string {
 }
 
 export default function DiscoveryScreen() {
-  const { permissionState, location, error, isLoading, requestLocationAccess } = useUserLocation();
-  const {
-    places,
-    isLoading: placesLoading,
-    error: placesError,
-  } = useNearbyPlaces(location);
+  const { permissionState, location, error, isLoading, refreshLocation, requestLocationAccess } = useUserLocation();
   const mapRef = useRef<MapView | null>(null);
   const carouselRef = useRef<ScrollView | null>(null);
   const [activeFilter, setActiveFilter] = useState<(typeof filterOptions)[number]['key']>('all');
   const [selectedMechanicId, setSelectedMechanicId] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(true);
+  const [isLocating, setIsLocating] = useState(false);
   const [region, setRegion] = useState<Region>(fallbackRegion);
+
+  const {
+    places,
+    isLoading: placesLoading,
+    error: placesError,
+  } = useNearbyPlaces(location);
 
   const visibleMechanics = useMemo(() => {
     if (activeFilter === 'all') {
@@ -105,18 +108,48 @@ export default function DiscoveryScreen() {
     }
   };
 
-  const handleRecenter = () => {
+  const handleRecenter = async () => {
     setIsFollowing(true);
-    if (location) {
-      mapRef.current?.animateToRegion(
-        {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          latitudeDelta: 0.014,
-          longitudeDelta: 0.014,
-        },
-        500
-      );
+    setIsLocating(true);
+
+    try {
+      if (permissionState !== 'granted') {
+        const status = await requestLocationAccess();
+        if (status === 'denied') {
+          Alert.alert(
+            'Location Access Required',
+            'MotoRescue needs location access to pinpoint your current location on the map.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            ]
+          );
+          return;
+        }
+      }
+
+      const freshLoc = await refreshLocation();
+      const currentCoords = freshLoc?.coords || location?.coords;
+
+      if (currentCoords) {
+        const nextRegion: Region = {
+          latitude: currentCoords.latitude,
+          longitude: currentCoords.longitude,
+          latitudeDelta: 0.012,
+          longitudeDelta: 0.012,
+        };
+        setRegion(nextRegion);
+        mapRef.current?.animateToRegion(nextRegion, 600);
+      } else {
+        Alert.alert(
+          'Location Signal',
+          'Waiting for GPS signal. On iOS Simulator, go to Features > Location to choose a location.'
+        );
+      }
+    } catch (err) {
+      console.warn('Recenter location error:', err);
+    } finally {
+      setIsLocating(false);
     }
   };
 
@@ -190,6 +223,7 @@ export default function DiscoveryScreen() {
         showsCompass={false}
         showsScale={false}
         showsMyLocationButton={false}
+        showsUserLocation={true}
       >
         {/* User Location Radar Marker */}
         {location ? (
@@ -320,12 +354,17 @@ export default function DiscoveryScreen() {
             style={[styles.glassFabButton, isFollowing && styles.glassFabActive]}
             onPress={handleRecenter}
             accessibilityLabel="Recenter location"
+            disabled={isLocating}
           >
-            <Ionicons
-              name={isFollowing ? 'locate' : 'locate-outline'}
-              size={22}
-              color={isFollowing ? '#10B981' : '#2563EB'}
-            />
+            {isLocating ? (
+              <ActivityIndicator size="small" color="#10B981" />
+            ) : (
+              <Ionicons
+                name={isFollowing ? 'locate' : 'locate-outline'}
+                size={22}
+                color={isFollowing ? '#10B981' : '#2563EB'}
+              />
+            )}
           </Pressable>
 
           {/* Emergency SOS Glass Button */}
