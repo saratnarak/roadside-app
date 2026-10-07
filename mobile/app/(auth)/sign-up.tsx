@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,17 +12,33 @@ import {
   View,
 } from 'react-native';
 import { useRouter, Link } from 'expo-router';
-import { useSignUp } from '@clerk/clerk-expo';
+import { useSignUp, useOAuth } from '@clerk/clerk-expo';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import { Ionicons } from '@expo/vector-icons';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function SignUpScreen() {
   const { isLoaded, signUp, setActive } = useSignUp();
   const router = useRouter();
+
+  const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
+  const { startOAuthFlow: startFacebookFlow } = useOAuth({ strategy: 'oauth_facebook' });
 
   const [emailAddress, setEmailAddress] = useState('');
   const [password, setPassword] = useState('');
   const [pendingVerification, setPendingVerification] = useState(false);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
 
   const onSignUpPress = async () => {
     if (!isLoaded) return;
@@ -78,6 +94,31 @@ export default function SignUpScreen() {
     }
   };
 
+  const onSocialAuth = useCallback(
+    async (strategy: 'oauth_google' | 'oauth_facebook') => {
+      try {
+        setOauthLoading(strategy);
+        const flow = strategy === 'oauth_google' ? startGoogleFlow : startFacebookFlow;
+        const { createdSessionId, setActive: setOAuthActive } = await flow({
+          redirectUrl: Linking.createURL('/(tabs)', { scheme: 'roadsideapp' }),
+        });
+
+        if (createdSessionId && setOAuthActive) {
+          await setOAuthActive({ session: createdSessionId });
+          router.replace('/(tabs)');
+        }
+      } catch (err: any) {
+        console.error('Social auth error:', err);
+        const message =
+          err?.errors?.[0]?.message || err?.message || 'Social sign up failed or was cancelled.';
+        Alert.alert('Social Sign In', message);
+      } finally {
+        setOauthLoading(null);
+      }
+    },
+    [startGoogleFlow, startFacebookFlow, router]
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -119,7 +160,7 @@ export default function SignUpScreen() {
               <TouchableOpacity
                 style={[styles.button, (!isLoaded || loading) && styles.buttonDisabled]}
                 onPress={onSignUpPress}
-                disabled={!isLoaded || loading}
+                disabled={!isLoaded || loading || oauthLoading !== null}
               >
                 {loading ? (
                   <ActivityIndicator color="#FFFFFF" />
@@ -127,6 +168,46 @@ export default function SignUpScreen() {
                   <Text style={styles.buttonText}>Continue</Text>
                 )}
               </TouchableOpacity>
+
+              {/* Divider */}
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Social Buttons */}
+              <View style={styles.socialRow}>
+                <TouchableOpacity
+                  style={[styles.socialButton, oauthLoading === 'oauth_google' && styles.buttonDisabled]}
+                  onPress={() => onSocialAuth('oauth_google')}
+                  disabled={oauthLoading !== null || loading}
+                >
+                  {oauthLoading === 'oauth_google' ? (
+                    <ActivityIndicator size="small" color="#EA4335" />
+                  ) : (
+                    <>
+                      <Ionicons name="logo-google" size={18} color="#EA4335" />
+                      <Text style={styles.socialButtonText}>Google</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.socialButton, oauthLoading === 'oauth_facebook' && styles.buttonDisabled]}
+                  onPress={() => onSocialAuth('oauth_facebook')}
+                  disabled={oauthLoading !== null || loading}
+                >
+                  {oauthLoading === 'oauth_facebook' ? (
+                    <ActivityIndicator size="small" color="#1877F2" />
+                  ) : (
+                    <>
+                      <Ionicons name="logo-facebook" size={18} color="#1877F2" />
+                      <Text style={styles.socialButtonText}>Facebook</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.footer}>
@@ -251,6 +332,44 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  dividerText: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginHorizontal: 12,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  socialButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 14,
+    paddingVertical: 13,
+  },
+  socialButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',
