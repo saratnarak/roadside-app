@@ -205,7 +205,7 @@ export default function DiscoveryScreen() {
   const statusDetail =
     !location || isLoading
       ? 'Searching signal'
-      : `${formatAccuracyLabel(location.coords.accuracy ?? undefined)} accurate`;
+      : `${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)} (${formatAccuracyLabel(location.coords.accuracy ?? undefined)})`;
 
   return (
     <View style={styles.container}>
